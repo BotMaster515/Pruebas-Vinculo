@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Enviar mensaje</title>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: #13131a;
+    --surface2: #1c1c26;
+    --accent: #35b8f1;
+    --accent-dark: #1e7aaa;
+    --text: #f0ece4;
+    --muted: #555560;
+    --border: rgba(255,255,255,0.08);
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    overflow: hidden;
+  }
+
+  /* ── Páginas ─────────────────────────────────────────────── */
+  .page {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    max-width: 430px;
+    margin: 0 auto;
+    transition: opacity 0.3s, transform 0.3s;
+  }
+
+  .page.hidden {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(40px);
+  }
+
+  /* ── Header ─────────────────────────────────────────────── */
+  .page-header {
+    padding: 20px 20px 16px;
+    border-bottom: 0.5px solid var(--border);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .back-btn {
+    background: none;
+    border: none;
+    color: rgba(53,184,241,0.6);
+    cursor: pointer;
+    font-size: 18px;
+    padding: 2px 6px 2px 0;
+    font-family: 'Space Mono', monospace;
+    transition: color 0.2s;
+    flex-shrink: 0;
+  }
+  .back-btn:hover { color: var(--accent); }
+
+  .header-titles { display: flex; flex-direction: column; gap: 2px; }
+
+  #header-title, .page-header-title {
+    font-size: 11px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: rgba(240,236,228,0.3);
+    font-family: 'Space Mono', monospace;
+  }
+
+  #header-sub, .page-header-sub {
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--text);
+    line-height: 1.1;
+  }
+
+  /* ── Campos genéricos ───────────────────────────────────── */
+  .field-group {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .field-label {
+    font-size: 11px;
+    color: rgba(240,236,228,0.4);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    font-family: 'Space Mono', monospace;
+  }
+
+  .field-input {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    font-size: 16px;
+    font-family: 'Space Mono', monospace;
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.2s, background 0.2s;
+    -webkit-appearance: none;
+    letter-spacing: 2px;
+  }
+  .field-input::placeholder { color: var(--muted); letter-spacing: 1px; }
+  .field-input:focus { border-color: var(--accent); background: var(--surface2); }
+
+  #code-input {
+    font-size: 24px;
+    letter-spacing: 6px;
+    text-align: center;
+    text-transform: uppercase;
+    font-weight: 700;
+  }
+
+  /* ── Botones ────────────────────────────────────────────── */
+  .btn {
+    width: 100%;
+    padding: 16px;
+    border-radius: 12px;
+    border: none;
+    font-size: 15px;
+    font-weight: 700;
+    font-family: 'Syne', sans-serif;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.1s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn:disabled { opacity: 0.35; pointer-events: none; }
+  .btn-primary { background: var(--accent); color: #0a0a0f; }
+  .btn-secondary {
+    background: transparent;
+    color: var(--accent);
+    border: 1px solid rgba(53,184,241,0.3);
+  }
+
+  /* ── Status badge ───────────────────────────────────────── */
+  #status-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    font-family: 'Space Mono', monospace;
+    color: rgba(240,236,228,0.4);
+    padding: 8px 14px;
+    background: var(--surface);
+    border-radius: 20px;
+    border: 0.5px solid var(--border);
+  }
+
+  #badge-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--muted);
+    transition: background 0.4s;
+    flex-shrink: 0;
+  }
+  #badge-dot.online  { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+  #badge-dot.error   { background: #e25a5a; }
+  #badge-dot.loading { background: #f5a623; animation: pulse 0.9s infinite; }
+
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  /* ── Hint de clave ──────────────────────────────────────── */
+  .field-hint {
+    font-size: 10px;
+    font-family: 'Space Mono', monospace;
+    color: rgba(53,184,241,0.4);
+    letter-spacing: 1px;
+    margin-top: -2px;
+  }
+
+  /* ══════════════════════════════════════════════════════════
+     PÁGINA 1 — Conexión
+  ══════════════════════════════════════════════════════════ */
+  #page-connect { background: var(--bg); }
+
+  #connect-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    gap: 22px;
+    overflow-y: auto;
+  }
+
+  /* Botón decodificador al fondo */
+  #decoder-link-wrap {
+    width: 100%;
+    padding: 0 20px 20px;
+    flex-shrink: 0;
+  }
+
+  #error-msg {
+    font-size: 12px;
+    color: #e25a5a;
+    font-family: 'Space Mono', monospace;
+    text-align: center;
+    min-height: 18px;
+  }
+
+  /* ══════════════════════════════════════════════════════════
+     PÁGINA 2 — Chat
+  ══════════════════════════════════════════════════════════ */
+  #page-chat { background: var(--bg); }
+
+  #chat-header {
+    padding: 12px 20px;
+    border-bottom: 0.5px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+
+  #chat-room {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: rgba(240,236,228,0.3);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+  #chat-room span { color: var(--accent); font-weight: 700; }
+
+  #chat-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-family: 'Space Mono', monospace;
+    color: rgba(240,236,228,0.4);
+  }
+
+  #sent-feed {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .sent-msg {
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: 12px 12px 4px 12px;
+    padding: 10px 14px;
+    font-size: 14px;
+    line-height: 1.5;
+    color: rgba(240,236,228,0.8);
+    align-self: flex-end;
+    max-width: 85%;
+    animation: slideIn 0.25s ease forwards;
+  }
+  .sent-msg.sending {
+    border-color: rgba(53,184,241,0.3);
+    background: rgba(53,184,241,0.06);
+  }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  #empty-feed {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    color: var(--muted);
+    font-size: 13px;
+    text-align: center;
+    padding: 40px;
+    font-family: 'Space Mono', monospace;
+  }
+  #empty-feed-icon { font-size: 32px; margin-bottom: 4px; opacity: 0.4; }
+
+  #chat-input-area {
+    padding: 12px 20px;
+    border-top: 0.5px solid var(--border);
+    background: var(--bg);
+    flex-shrink: 0;
+  }
+  #input-row { display: flex; gap: 10px; align-items: flex-end; }
+
+  #msg-input {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 14px;
+    font-size: 15px;
+    font-family: 'Syne', sans-serif;
+    color: var(--text);
+    resize: none;
+    outline: none;
+    min-height: 44px;
+    max-height: 120px;
+    line-height: 1.4;
+    transition: border-color 0.2s;
+    -webkit-appearance: none;
+  }
+  #msg-input::placeholder { color: var(--muted); }
+  #msg-input:focus { border-color: rgba(53,184,241,0.4); }
+
+  #send-btn {
+    width: 44px; height: 44px;
+    border-radius: 12px;
+    background: var(--accent);
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    -webkit-tap-highlight-color: transparent;
+    transition: opacity 0.2s, transform 0.1s;
+  }
+  #send-btn:active { transform: scale(0.93); }
+  #send-btn:disabled { opacity: 0.3; pointer-events: none; }
+  #send-btn svg { width: 20px; height: 20px; fill: #0a0a0f; }
+
+  #char-counter {
+    font-size: 11px;
+    font-family: 'Space Mono', monospace;
+    color: var(--muted);
+    text-align: right;
+    margin-top: 6px;
+  }
+  #char-counter.warn { color: #f5a623; }
+  #char-counter.over { color: #e25a5a; }
+
+  /* Mensajes recibidos */
+  .recv-msg {
+    background: var(--surface2);
+    border: 0.5px solid rgba(123,94,167,0.25);
+    border-radius: 12px 12px 12px 4px;
+    padding: 10px 14px;
+    align-self: flex-start;
+    max-width: 85%;
+    animation: slideIn 0.25s ease forwards;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: border-color 0.25s, background 0.25s;
+    user-select: none;
+  }
+  .recv-msg:active { transform: scale(0.98); }
+  .recv-msg.revealed {
+    border-color: rgba(53,184,241,0.3);
+    background: rgba(53,184,241,0.04);
+  }
+  .recv-name {
+    font-size: 10px;
+    font-family: 'Space Mono', monospace;
+    color: rgba(123,94,167,0.9);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 2px;
+    transition: color 0.25s;
+  }
+  .recv-msg.revealed .recv-name { color: rgba(53,184,241,0.6); }
+  .recv-ciphered {
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+    color: rgba(240,236,228,0.45);
+    letter-spacing: 1px;
+    word-break: break-word;
+  }
+  .recv-msg.revealed .recv-ciphered { display: none; }
+  .recv-deciphered {
+    font-size: 14px;
+    color: var(--text);
+    line-height: 1.4;
+    word-break: break-word;
+    display: none;
+  }
+  .recv-msg.revealed .recv-deciphered { display: block; }
+  .recv-hint {
+    font-size: 9px;
+    font-family: 'Space Mono', monospace;
+    color: rgba(240,236,228,0.18);
+    letter-spacing: 1px;
+    margin-top: 2px;
+  }
+  .recv-msg.revealed .recv-hint { display: none; }
+
+  /* ══════════════════════════════════════════════════════════
+     PÁGINA 3 — Decodificador
+  ══════════════════════════════════════════════════════════ */
+  #page-decoder { background: var(--bg); }
+
+  #decoder-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 24px 20px;
+    gap: 22px;
+    overflow-y: auto;
+  }
+
+  .decoder-desc {
+    font-size: 12px;
+    font-family: 'Space Mono', monospace;
+    color: rgba(240,236,228,0.3);
+    line-height: 1.7;
+    letter-spacing: 0.5px;
+    border-left: 2px solid rgba(53,184,241,0.25);
+    padding-left: 12px;
+  }
+
+  /* Resultado */
+  #decode-result-box {
+    background: var(--surface);
+    border: 1px solid rgba(53,184,241,0.2);
+    border-radius: 12px;
+    padding: 18px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-height: 80px;
+    transition: border-color 0.3s, background 0.3s;
+  }
+  #decode-result-box.has-result {
+    border-color: rgba(53,184,241,0.5);
+    background: rgba(53,184,241,0.05);
+  }
+
+  .result-label {
+    font-size: 9px;
+    font-family: 'Space Mono', monospace;
+    color: rgba(53,184,241,0.45);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+  }
+
+  #decode-result-text {
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--text);
+    word-break: break-word;
+    line-height: 1.2;
+    min-height: 30px;
+  }
+
+  #decode-result-text.empty {
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--muted);
+    font-family: 'Space Mono', monospace;
+  }
+
+  .decode-btn {
+    width: 100%;
+    padding: 16px;
+    border-radius: 12px;
+    border: none;
+    font-size: 15px;
+    font-weight: 700;
+    font-family: 'Syne', sans-serif;
+    letter-spacing: 1px;
+    cursor: pointer;
+    background: var(--accent);
+    color: #0a0a0f;
+    transition: opacity 0.2s, transform 0.1s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .decode-btn:active { transform: scale(0.97); }
+  .decode-btn:disabled { opacity: 0.35; pointer-events: none; }
+
+  /* Input numérico para clave */
+  input[type=number].field-input {
+    -moz-appearance: textfield;
+  }
+  input[type=number].field-input::-webkit-inner-spin-button,
+  input[type=number].field-input::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+  }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════════
+     PÁGINA 1 — Conexión
+══════════════════════════════════════════════════════════ -->
+<div class="page" id="page-connect">
+  <div class="page-header" style="display:block;">
+    <div id="header-title">cliente</div>
+    <div id="header-sub">Enviar mensaje</div>
+  </div>
+
+  <div id="connect-body">
+    <div id="status-badge">
+      <div id="badge-dot" class="loading"></div>
+      <span id="badge-text">iniciando...</span>
+    </div>
+
+    <div class="field-group">
+      <div class="field-label">Tu nombre</div>
+      <input class="field-input" id="name-input" type="text" placeholder="ej: María" maxlength="20" autocomplete="off" />
+    </div>
+
+    <div class="field-group">
+      <div class="field-label">Código de sala</div>
+      <input class="field-input" id="code-input" type="text" placeholder="XXXXXX" maxlength="6" autocomplete="off" />
+    </div>
+
+    <div class="field-group">
+      <div class="field-label">Clave</div>
+      <input class="field-input" id="key-input" type="number" min="1" max="99" placeholder="ej: 3" autocomplete="off" />
+      <div class="field-hint">→ número de veces que se aplica el cifrado César</div>
+    </div>
+
+    <div id="error-msg"></div>
+
+    <button class="btn btn-primary" id="connect-btn" disabled onclick="connectToHost()">Conectar</button>
+  </div>
+
+  <!-- Botón ir al decodificador -->
+  <div id="decoder-link-wrap">
+    <button class="btn btn-secondary" onclick="showPage('page-decoder')">⌂ Ir al decodificador</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     PÁGINA 2 — Chat
+══════════════════════════════════════════════════════════ -->
+<div class="page hidden" id="page-chat">
+  <div id="chat-header">
+    <div id="chat-room">sala: <span id="chat-room-code">——</span></div>
+    <div id="chat-status">
+      <div id="badge-dot2" style="width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 6px var(--accent);flex-shrink:0;"></div>
+      <span id="chat-conn-text">conectado</span>
+    </div>
+  </div>
+
+  <div id="sent-feed">
+    <div id="empty-feed">
+      <div id="empty-feed-icon">◎</div>
+      <span>tus mensajes aparecerán<br>en la pantalla principal</span>
+    </div>
+  </div>
+
+  <div id="chat-input-area">
+    <div id="input-row">
+      <textarea id="msg-input" placeholder="Escribe algo..." rows="1" maxlength="120"></textarea>
+      <button id="send-btn" onclick="sendMessage()" disabled title="Enviar">
+        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z"/>
+        </svg>
+      </button>
+    </div>
+    <div id="char-counter">0 / 120</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     PÁGINA 3 — Decodificador
+══════════════════════════════════════════════════════════ -->
+<div class="page hidden" id="page-decoder">
+  <div class="page-header">
+    <button class="back-btn" onclick="showPage('page-connect')">←</button>
+    <div class="header-titles">
+      <div class="page-header-title">herramienta</div>
+      <div class="page-header-sub">Decodificador</div>
+    </div>
+  </div>
+
+  <div id="decoder-body">
+    <div class="decoder-desc">
+      Escribe la palabra cifrada que aparece en la pantalla del host y la clave que usó quien la envió. El decodificador revertirá el proceso y mostrará la palabra original.
+    </div>
+
+    <!-- Resultado primero, visible siempre -->
+    <div id="decode-result-box">
+      <div class="result-label">Resultado</div>
+      <div id="decode-result-text" class="empty">aquí aparecerá la palabra original...</div>
+    </div>
+
+    <div class="field-group">
+      <div class="field-label">Palabra cifrada</div>
+      <input class="field-input" id="decode-word" type="text" placeholder="ej: AOVVY" autocomplete="off" oninput="liveDecoder()" />
+    </div>
+
+    <div class="field-group">
+      <div class="field-label">Clave (número de veces)</div>
+      <input class="field-input" id="decode-key" type="number" min="1" max="99" placeholder="ej: 3" autocomplete="off" oninput="liveDecoder()" />
+      <div class="field-hint">→ la misma clave que usó quien envió el mensaje</div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  // ── Navegación entre páginas ─────────────────────────────
+  function showPage(id) {
+    document.querySelectorAll('.page').forEach(p => {
+      p.classList.toggle('hidden', p.id !== id);
+    });
+  }
+
+  // ── César con clave variable ─────────────────────────────
+  // La clave es directamente el número de posiciones de desplazamiento
+  function cesarCipher(str, key) {
+    const shift = key % 26;
+    return applyShift(str, shift);
+  }
+
+  function cesarDecipher(str, key) {
+    const shift = key % 26;
+    return applyShift(str, (26 - shift) % 26);
+  }
+
+  function applyShift(str, shift) {
+    return String(str).split('').map(c => {
+      if (c >= 'A' && c <= 'Z') return String.fromCharCode(((c.charCodeAt(0) - 65 + shift) % 26) + 65);
+      if (c >= 'a' && c <= 'z') return String.fromCharCode(((c.charCodeAt(0) - 97 + shift) % 26) + 97);
+      if (c >= '0' && c <= '9') return String.fromCharCode(((c.charCodeAt(0) - 48 + shift) % 10) + 48);
+      return c;
+    }).join('');
+  }
+
+  // ── Decodificador en vivo ────────────────────────────────
+  function liveDecoder() {
+    const word = document.getElementById('decode-word').value.trim();
+    const key  = parseInt(document.getElementById('decode-key').value);
+    const box  = document.getElementById('decode-result-box');
+    const out  = document.getElementById('decode-result-text');
+
+    if (!word || isNaN(key) || key < 1) {
+      box.classList.remove('has-result');
+      out.textContent = 'aquí aparecerá la palabra original...';
+      out.className = 'empty';
+      return;
+    }
+
+    const result = cesarDecipher(word, key);
+    box.classList.add('has-result');
+    out.textContent = result;
+    out.className = '';
+  }
+
+  // ── PeerJS & conexión ────────────────────────────────────
+  let peer = null, conn = null, myName = '', myKey = 1, peerReady = false;
+  const MAX_CHARS = 120;
+
+  const badgeDot   = document.getElementById('badge-dot');
+  const badgeText  = document.getElementById('badge-text');
+  const connectBtn = document.getElementById('connect-btn');
+  const errorMsg   = document.getElementById('error-msg');
+  const nameInput  = document.getElementById('name-input');
+  const codeInput  = document.getElementById('code-input');
+  const keyInput   = document.getElementById('key-input');
+  const sendBtn    = document.getElementById('send-btn');
+  const msgInput   = document.getElementById('msg-input');
+  const charCounter= document.getElementById('char-counter');
+  const sentFeed   = document.getElementById('sent-feed');
+  const emptyFeed  = document.getElementById('empty-feed');
+  const chatRoomCode = document.getElementById('chat-room-code');
+
+  peer = new Peer({ debug: 0 });
+
+  peer.on('open', () => {
+    peerReady = true;
+    badgeDot.className = 'online';
+    badgeText.textContent = 'listo para conectar';
+    updateConnectBtn();
+  });
+
+  peer.on('error', () => {
+    badgeDot.className = 'error';
+    badgeText.textContent = 'error de red';
+    showError('Error de conexión. Recarga la página.');
+  });
+
+  function updateConnectBtn() {
+    const ok = peerReady
+      && nameInput.value.trim().length > 0
+      && codeInput.value.trim().length >= 4
+      && keyInput.value.trim().length > 0
+      && parseInt(keyInput.value) >= 1;
+    connectBtn.disabled = !ok;
+  }
+
+  nameInput.addEventListener('input', updateConnectBtn);
+  keyInput.addEventListener('input', updateConnectBtn);
+  codeInput.addEventListener('input', () => {
+    codeInput.value = codeInput.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    updateConnectBtn();
+  });
+
+  function showError(msg) {
+    errorMsg.textContent = msg;
+    setTimeout(() => { errorMsg.textContent = ''; }, 4000);
+  }
+
+  function connectToHost() {
+    const code = codeInput.value.trim().toUpperCase();
+    const name = nameInput.value.trim();
+    const key  = parseInt(keyInput.value);
+    if (!code || !name || isNaN(key) || key < 1) return;
+
+    myName = name;
+    myKey  = key;
+    const roomId = 'sala-' + code;
+
+    connectBtn.disabled = true;
+    badgeDot.className = 'loading';
+    badgeText.textContent = 'conectando...';
+    errorMsg.textContent = '';
+
+    conn = peer.connect(roomId, { reliable: true });
+
+    const timeout = setTimeout(() => {
+      if (!conn || conn.open === false) {
+        badgeDot.className = 'error';
+        badgeText.textContent = 'no encontrado';
+        connectBtn.disabled = false;
+        showError('Código de sala no encontrado. Verifica e intenta de nuevo.');
+        if (conn) conn.close();
+      }
+    }, 8000);
+
+    conn.on('open', () => {
+      clearTimeout(timeout);
+      switchToChat(code);
+    });
+
+    conn.on('data', (data) => {
+      if (data && data.broadcast && data.text) {
+        addReceivedMessage(data.text, data.name || 'anon');
+      }
+    });
+
+    conn.on('error', () => {
+      clearTimeout(timeout);
+      badgeDot.className = 'error';
+      badgeText.textContent = 'error';
+      connectBtn.disabled = false;
+      showError('No se pudo conectar. Verifica el código.');
+    });
+
+    conn.on('close', () => {
+      const d2 = document.getElementById('badge-dot2');
+      const t2 = document.getElementById('chat-conn-text');
+      if (d2) { d2.style.background = '#e25a5a'; d2.style.boxShadow = 'none'; }
+      if (t2) t2.textContent = 'desconectado';
+      sendBtn.disabled = true;
+    });
+  }
+
+  function switchToChat(code) {
+    showPage('page-chat');
+    chatRoomCode.textContent = code;
+    sendBtn.disabled = false;
+    msgInput.focus();
+  }
+
+  // Textarea auto-resize
+  msgInput.addEventListener('input', () => {
+    msgInput.style.height = 'auto';
+    msgInput.style.height = Math.min(msgInput.scrollHeight, 120) + 'px';
+    const len = msgInput.value.length;
+    charCounter.textContent = `${len} / ${MAX_CHARS}`;
+    charCounter.className = len > 100 ? (len >= MAX_CHARS ? 'over' : 'warn') : '';
+  });
+
+  msgInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+  });
+
+  function addReceivedMessage(text, name) {
+    if (emptyFeed) emptyFeed.style.display = 'none';
+    const ciphered   = cesarCipher(text, myKey);
+    const deciphered = text;
+    const el = document.createElement('div');
+    el.className = 'recv-msg';
+    el.innerHTML = `
+      <div class="recv-name">${esc(name)}</div>
+      <div class="recv-ciphered">${esc(ciphered)}</div>
+      <div class="recv-deciphered">${esc(deciphered)}</div>
+      <div class="recv-hint">toca para descifrar</div>
+    `;
+    el.addEventListener('click', () => el.classList.toggle('revealed'));
+    sentFeed.appendChild(el);
+    sentFeed.scrollTop = sentFeed.scrollHeight;
+  }
+
+  function esc(s) {
+    return String(s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function sendMessage() {
+    const text = msgInput.value.trim();
+    if (!text || !conn || !conn.open) return;
+
+    // Cifrar con la clave del usuario antes de enviar
+    // Se manda también el texto original para que el host pueda agrupar burbujas iguales
+    const ciphered = cesarCipher(text, myKey);
+    conn.send({ text: ciphered, original: text.toLowerCase().trim(), name: myName });
+
+    if (emptyFeed) emptyFeed.style.display = 'none';
+    const el = document.createElement('div');
+    el.className = 'sent-msg sending';
+    el.textContent = text;
+    sentFeed.appendChild(el);
+    sentFeed.scrollTop = sentFeed.scrollHeight;
+    setTimeout(() => el.classList.remove('sending'), 600);
+
+    msgInput.value = '';
+    msgInput.style.height = 'auto';
+    charCounter.textContent = `0 / ${MAX_CHARS}`;
+    charCounter.className = '';
+  }
+</script>
+</body>
+</html>
